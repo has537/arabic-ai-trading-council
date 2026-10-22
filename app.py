@@ -1,697 +1,488 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
+import random
 import json
-import uuid
 from pathlib import Path
 from datetime import datetime
 
-# =========================================================
-# إعدادات التطبيق
-# =========================================================
+# -----------------------------
+# إعداد الصفحة
+# -----------------------------
 st.set_page_config(
     page_title="مجلس التداول الذكي",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
+# -----------------------------
+# تنسيق الواجهة العربية
+# -----------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="stApp"] {
+    font-family: 'Cairo', sans-serif;
+}
+
+.stApp {
+    direction: rtl;
+}
+
+[data-testid="stAppViewContainer"] {
+    direction: rtl;
+}
+
+h1, h2, h3, p, label {
+    text-align: right;
+}
+
+div[data-testid="stMetric"] {
+    direction: rtl;
+    text-align: right;
+    background: #171a21;
+    border: 1px solid #303642;
+    padding: 18px;
+    border-radius: 14px;
+}
+
+div[data-testid="stMetricLabel"] {
+    text-align: right;
+}
+
+div[data-testid="stMetricValue"] {
+    direction: ltr;
+    text-align: right;
+    unicode-bidi: isolate;
+    font-variant-numeric: tabular-nums;
+}
+
+div[data-testid="stMarkdownContainer"] {
+    overflow-wrap: anywhere;
+}
+
+div.stButton > button {
+    width: 100%;
+    min-height: 46px;
+    border-radius: 10px;
+    font-family: 'Cairo', sans-serif;
+    font-weight: 700;
+}
+
+.agent-card {
+    background: #171a21;
+    border: 1px solid #303642;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 10px;
+    overflow-wrap: anywhere;
+}
+
+.notice {
+    background: #292419;
+    border-right: 5px solid #e5ad42;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 12px 0;
+    line-height: 1.9;
+}
+
+.small-note {
+    color: #aeb5c2;
+    font-size: 0.9rem;
+    line-height: 1.8;
+}
+
+div[data-testid="stDataFrame"] {
+    direction: ltr;
+}
+
+@media (max-width: 640px) {
+    h1 { font-size: 1.7rem !important; }
+    h2 { font-size: 1.35rem !important; }
+    div[data-testid="stMetric"] { padding: 12px; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
+# ملفات البيانات
+# -----------------------------
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 TRADES_FILE = DATA_DIR / "paper_trades.json"
 
 COINS = {
-    "BTC": {"name": "بيتكوين", "base": 67200.0},
-    "ETH": {"name": "إيثيريوم", "base": 3520.0},
-    "SOL": {"name": "سولانا", "base": 168.0},
-    "BNB": {"name": "باينانس كوين", "base": 590.0},
-    "XRP": {"name": "ريبل", "base": 0.61},
-    "DOGE": {"name": "دوجكوين", "base": 0.16},
+    "BTC": {"name": "بيتكوين", "base": 65000.0},
+    "ETH": {"name": "إيثيريوم", "base": 3200.0},
+    "SOL": {"name": "سولانا", "base": 150.0},
+    "BNB": {"name": "باينانس كوين", "base": 600.0},
+    "XRP": {"name": "ريبل", "base": 0.60},
+    "DOGE": {"name": "دوجكوين", "base": 0.15},
 }
 
 AGENTS = [
-    "المحلل الفني",
-    "المحلل الكمي",
-    "مسؤول المخاطر",
-    "المراجع المستقل",
+    ("📈", "المحلل الفني", "يفحص اتجاه السعر والزخم"),
+    ("📊", "المحلل الكمي", "يقيّم الحركة والتذبذب"),
+    ("🛡️", "مدير المخاطر", "يراجع المخاطرة وحجم الصفقة"),
+    ("🔍", "المراجع المستقل", "يتحقق من توافق القرار"),
 ]
 
-# =========================================================
-# تنسيق الواجهة العربية
-# =========================================================
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap');
+# -----------------------------
+# إدارة الحالة
+# -----------------------------
+if "balance" not in st.session_state:
+    st.session_state.balance = 10000.0
 
-    html, body, [class*="css"], .stApp {
-        font-family: 'Cairo', sans-serif;
-    }
-
-    .stApp {
-        direction: rtl;
-    }
-
-    [data-testid="stAppViewContainer"] {
-        direction: rtl;
-    }
-
-    [data-testid="stSidebar"] {
-        direction: rtl;
-        text-align: right;
-    }
-
-    [data-testid="stMarkdownContainer"],
-    [data-testid="stWidgetLabel"],
-    [data-testid="stMetricLabel"],
-    [data-testid="stMetricValue"] {
-        text-align: right;
-    }
-
-    [data-testid="stMetric"] {
-        direction: rtl;
-        text-align: right;
-        background: rgba(128,128,128,0.08);
-        border: 1px solid rgba(128,128,128,0.15);
-        padding: 14px;
-        border-radius: 14px;
-    }
-
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap;
-        gap: 0.8rem;
-    }
-
-    .notice {
-        padding: 14px;
-        border-right: 5px solid #d99a20;
-        border-radius: 10px;
-        background: rgba(217,154,32,0.12);
-        line-height: 1.9;
-        overflow-wrap: anywhere;
-    }
-
-    .agent-card {
-        padding: 16px;
-        margin-bottom: 10px;
-        border: 1px solid rgba(128,128,128,0.3);
-        border-radius: 14px;
-        min-height: 120px;
-        overflow-wrap: anywhere;
-    }
-
-    h1, h2, h3, p {
-        overflow-wrap: anywhere;
-    }
-
-    @media (max-width: 640px) {
-        [data-testid="stAppViewContainer"] .main .block-container {
-            padding: 1rem 0.8rem 2rem 0.8rem;
-        }
-
-        h1 {
-            font-size: 1.7rem !important;
-        }
-
-        h2 {
-            font-size: 1.35rem !important;
-        }
-
-        [data-testid="stMetric"] {
-            padding: 10px;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# =========================================================
-# حفظ سجل الصفقات وقراءته
-# =========================================================
-def load_trades():
-    if not TRADES_FILE.exists():
-        return []
-
-    try:
-        data = json.loads(TRADES_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (OSError, json.JSONDecodeError):
-        return []
-
-
-def save_trades(trades):
-    temporary_file = TRADES_FILE.with_suffix(".tmp")
-    temporary_file.write_text(
-        json.dumps(trades, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    temporary_file.replace(TRADES_FILE)
-
-
-# =========================================================
-# بيانات سوق اصطناعية للتجربة فقط
-# =========================================================
-def market_snapshot():
-    rng = np.random.default_rng()
-
-    rows = []
-    for symbol, info in COINS.items():
-        change = float(rng.normal(0, 1.0))
-        volatility = float(rng.uniform(0.2, 2.8))
-        price = info["base"] * (1 + change / 100)
-
-        if change > 0.35:
-            trend = "صاعد"
-        elif change < -0.35:
-            trend = "هابط"
-        else:
-            trend = "عرضي"
-
-        rows.append({
-            "الرمز": symbol,
-            "العملة": info["name"],
-            "السعر التجريبي": round(price, 6),
-            "التغير %": round(change, 3),
-            "التذبذب": round(volatility, 3),
-            "الاتجاه": trend,
-        })
-
-    return pd.DataFrame(rows)
-
-
-# =========================================================
-# تصويت الوكلاء
-# هذه قواعد توضيحية وليست نموذج ذكاء اصطناعي تنبؤي
-# =========================================================
-def agent_vote(name, change, volatility):
-    if name == "المحلل الفني":
-        if change > 0.8:
-            vote = "شراء"
-        elif change < -0.8:
-            vote = "بيع"
-        else:
-            vote = "انتظار"
-        reason = "يفحص اتجاه التغير السعري."
-
-    elif name == "المحلل الكمي":
-        if change > 1.2:
-            vote = "شراء"
-        elif change < -1.2:
-            vote = "بيع"
-        else:
-            vote = "انتظار"
-        reason = "يطبق حدودًا رقمية بسيطة."
-
-    elif name == "مسؤول المخاطر":
-        if volatility > 2.2:
-            vote = "انتظار"
-        elif change > 1.0:
-            vote = "شراء"
-        elif change < -1.0:
-            vote = "بيع"
-        else:
-            vote = "انتظار"
-        reason = "يرفض الإشارة عند ارتفاع التذبذب."
-
+if "trades" not in st.session_state:
+    if TRADES_FILE.exists():
+        try:
+            st.session_state.trades = json.loads(
+                TRADES_FILE.read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError):
+            st.session_state.trades = []
     else:
-        if change > 1.5:
-            vote = "شراء"
-        elif change < -1.5:
-            vote = "بيع"
-        else:
-            vote = "انتظار"
-        reason = "يطلب حركة سعرية أوضح."
+        st.session_state.trades = []
 
-    return {
-        "الوكيل": name,
-        "التصويت": vote,
-        "التفسير": reason,
+if "last_analysis" not in st.session_state:
+    st.session_state.last_analysis = None
+
+if "prices" not in st.session_state:
+    st.session_state.prices = {
+        symbol: info["base"] for symbol, info in COINS.items()
     }
 
-
-def council_decision(row):
-    votes = [
-        agent_vote(
-            name,
-            float(row["التغير %"]),
-            float(row["التذبذب"]),
+def save_trades():
+    try:
+        TRADES_FILE.write_text(
+            json.dumps(st.session_state.trades, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
-        for name in AGENTS
-    ]
+    except OSError:
+        st.warning("تعذر حفظ سجل الصفقات في الملف.")
 
-    directions = [vote["التصويت"] for vote in votes]
+def fmt_money(value):
+    return f"${value:,.2f}"
 
-    unanimous = (
-        len(directions) == 4
-        and directions[0] in ("شراء", "بيع")
-        and all(direction == directions[0] for direction in directions)
-    )
+def fmt_price(value):
+    return f"{value:,.4f}" if value < 10 else f"{value:,.2f}"
 
-    decision = directions[0] if unanimous else "انتظار"
-    return votes, decision, unanimous
-
-
-# =========================================================
-# عنوان الصفحة والتحذير
-# =========================================================
+# -----------------------------
+# عنوان التطبيق
+# -----------------------------
 st.title("🧠 مجلس التداول الذكي")
-st.caption(
-    "واجهة عربية تجريبية لأربعة وكلاء، "
-    "مع اشتراط الإجماع الكامل قبل فتح أي صفقة ورقية."
-)
+st.caption("محاكاة تداول تجريبية بأربعة وكلاء مستقلين")
 
-st.markdown(
-    """
-    <div class="notice">
-    <b>تنبيه:</b>
-    الأسعار في هذه النسخة اصطناعية وليست أسعار سوق حية.
-    التطبيق لا يتصل بـ Phantom أو Hyperliquid،
-    ولا يرسل أوامر تداول حقيقية.
-    لا تدخل عبارة استرداد المحفظة أو مفتاحها الخاص.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<div class="notice">
+<b>تنبيه مهم:</b>
+هذه النسخة تجريبية، والأسعار المعروضة اصطناعية وليست أسعار سوق مباشرة.
+لا يوجد اتصال بـ Phantom أو Hyperliquid، ولا تُرسل أوامر تداول حقيقية.
+إجماع الوكلاء لا يضمن الربح ولا يجعل التوقع موثوقًا تلقائيًا.
+</div>
+""", unsafe_allow_html=True)
 
-# =========================================================
-# إعدادات المحاكاة
-# =========================================================
+# -----------------------------
+# الشريط الجانبي
+# -----------------------------
 with st.sidebar:
-    st.header("⚙️ إعدادات المحاكاة")
+    st.header("⚙️ الإعدادات")
 
-    initial_balance = st.number_input(
-        "الرصيد الافتراضي USDC",
-        min_value=100.0,
-        max_value=1_000_000.0,
-        value=10_000.0,
-        step=500.0,
-    )
-
-    risk_pct = st.slider(
-        "المخاطرة الافتراضية (%)",
-        min_value=0.1,
-        max_value=2.0,
-        value=0.5,
-        step=0.1,
-    )
-
-    leverage = st.selectbox(
-        "الرافعة التجريبية",
-        [1, 2, 3, 5],
-        index=0,
-    )
-
-    st.info(
-        "الإجماع ثابت عند 4/4. "
-        "هذه الإعدادات لا تتصل بأي منصة تداول."
-    )
-
-    if st.button("🧹 مسح سجل الصفقات", use_container_width=True):
-        save_trades([])
-        st.session_state.confirmed_balance = float(initial_balance)
-        st.success("تم مسح سجل الصفقات.")
-        st.rerun()
-
-if "paper_balance" not in st.session_state:
-    st.session_state.paper_balance = float(initial_balance)
-
-if "confirmed_balance" not in st.session_state:
-    st.session_state.confirmed_balance = float(initial_balance)
-
-if "market" not in st.session_state:
-    st.session_state.market = market_snapshot()
-
-if "last_run" not in st.session_state:
-    st.session_state.last_run = None
-
-# =========================================================
-# أزرار التحكم
-# =========================================================
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.button("🔄 تحديث بيانات المحاكاة", use_container_width=True):
-        st.session_state.market = market_snapshot()
-        st.session_state.last_run = None
-        st.rerun()
-
-with col2:
-    if st.button("↺ إعادة ضبط الرصيد", use_container_width=True):
-        st.session_state.paper_balance = float(initial_balance)
-        st.session_state.confirmed_balance = float(initial_balance)
-        st.rerun()
-
-market = st.session_state.market.copy()
-trades = load_trades()
-
-open_trades = [t for t in trades if t.get("الحالة") == "مفتوحة"]
-closed_trades = [t for t in trades if t.get("الحالة") == "مغلقة"]
-
-wins = sum(
-    1 for trade in closed_trades
-    if float(trade.get("النتيجة USDC", 0)) > 0
-)
-
-win_rate = (
-    wins / len(closed_trades) * 100
-    if closed_trades else 0.0
-)
-
-# =========================================================
-# مؤشرات المحاكاة
-# =========================================================
-m1, m2, m3 = st.columns(3)
-
-m1.metric(
-    "الرصيد الافتراضي",
-    f"{st.session_state.paper_balance:,.2f} USDC",
-)
-
-m2.metric("الصفقات المفتوحة", len(open_trades))
-m3.metric("الصفقات المغلقة", len(closed_trades))
-
-st.metric("نسبة الفوز للصفقات المغلقة", f"{win_rate:.1f}%")
-
-# =========================================================
-# أقسام التطبيق
-# =========================================================
-tab_market, tab_agents, tab_trades, tab_security = st.tabs([
-    "📊 السوق",
-    "🧠 الوكلاء",
-    "📒 سجل الصفقات",
-    "🔐 الربط والأمان",
-])
-
-# =========================================================
-# قسم السوق والتحليل
-# =========================================================
-with tab_market:
-    st.subheader("أسعار السوق التجريبية")
-    st.caption("هذه الأسعار مولدة محليًا ولا تمثل أسعار السوق الفعلية.")
-
-    st.dataframe(
-        market,
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    st.subheader("تشغيل جولة تحليل")
-
-    chosen = st.selectbox(
-        "اختر العملة",
+    selected_coin = st.selectbox(
+        "العملة",
         list(COINS.keys()),
-        format_func=lambda symbol: (
-            f"{symbol} · {COINS[symbol]['name']}"
-        ),
+        format_func=lambda x: f"{x} - {COINS[x]['name']}",
     )
 
-    if st.button(
-        "🧠 تشغيل الوكلاء الأربعة",
-        type="primary",
-        use_container_width=True,
-    ):
-        row = market.loc[market["الرمز"] == chosen].iloc[0]
-        votes, decision, unanimous = council_decision(row)
+    trade_style = st.selectbox(
+        "نوع التحليل",
+        ["يومي", "قصير الأجل"],
+    )
 
-        st.session_state.last_run = {
-            "symbol": chosen,
-            "price": float(row["السعر التجريبي"]),
-            "change": float(row["التغير %"]),
-            "volatility": float(row["التذبذب"]),
-            "votes": votes,
-            "decision": decision,
-            "unanimous": unanimous,
-        }
+    risk_percent = st.slider(
+        "المخاطرة الافتراضية لكل صفقة (%)",
+        min_value=0.5,
+        max_value=2.0,
+        value=1.0,
+        step=0.5,
+    )
 
-    run = st.session_state.last_run
+    st.markdown("---")
+    st.caption("وضع التنفيذ: محاكاة فقط")
 
-    if run:
-        st.markdown(f"### نتيجة التحليل: {run['symbol']}")
+# -----------------------------
+# لوحة المؤشرات
+# -----------------------------
+open_trades = [
+    trade for trade in st.session_state.trades
+    if trade.get("status") == "مفتوحة"
+]
 
-        if run["unanimous"]:
-            st.success(
-                f"إجماع كامل 4/4 على {run['decision']} "
-                "ضمن المحاكاة فقط."
-            )
-        else:
-            st.warning(
-                "لا يوجد إجماع كامل 4/4. "
-                "القرار النهائي هو انتظار ولا تُفتح صفقة."
-            )
+closed_trades = [
+    trade for trade in st.session_state.trades
+    if trade.get("status") == "مغلقة"
+]
 
-        st.write(f"السعر التجريبي: {run['price']:,.6f}")
-        st.write(f"التغير: {run['change']:+.3f}%")
-        st.write(f"التذبذب: {run['volatility']:.3f}")
+c1, c2, c3 = st.columns(3)
 
-        st.dataframe(
-            pd.DataFrame(run["votes"]),
-            use_container_width=True,
-            hide_index=True,
-        )
+with c1:
+    st.metric("الرصيد التجريبي", fmt_money(st.session_state.balance))
 
-        if run["unanimous"]:
-            st.warning(
-                "فتح الصفقة هنا ينشئ سجلًا ورقيًا فقط. "
-                "لا يتم إرسال أي أمر إلى منصة."
-            )
+with c2:
+    st.metric("الصفقات المفتوحة", len(open_trades))
 
-            if st.button(
-                "📝 فتح صفقة ورقية",
-                type="primary",
-                use_container_width=True,
-            ):
-                trades = load_trades()
+with c3:
+    st.metric("الصفقات المغلقة", len(closed_trades))
 
-                # فحص الإجماع مرة أخرى قبل إنشاء الصفقة
-                directions = [
-                    item["التصويت"] for item in run["votes"]
-                ]
+st.markdown("---")
 
-                valid_consensus = (
-                    len(directions) == 4
-                    and directions[0] in ("شراء", "بيع")
-                    and all(
-                        direction == directions[0]
-                        for direction in directions
-                    )
-                )
+# -----------------------------
+# عرض الوكلاء
+# -----------------------------
+st.header("🤖 فريق التحليل")
 
-                if not valid_consensus:
-                    st.error("فشل فحص الإجماع. لم تُفتح صفقة.")
-                    st.stop()
+agent_columns = st.columns(2)
 
-                risk_amount = (
-                    st.session_state.paper_balance
-                    * risk_pct / 100
-                )
-
-                # قيمة اسمية توضيحية، وليست قياسًا دقيقًا
-                # للمخاطرة الفعلية للعقود الدائمة
-                notional = risk_amount * leverage
-
-                if risk_amount <= 0 or notional <= 0:
-                    st.error("لا يمكن إنشاء صفقة بحجم غير صالح.")
-                    st.stop()
-
-                trade = {
-                    "المعرف": str(uuid.uuid4())[:8],
-                    "الوقت": datetime.now().astimezone().isoformat(
-                        timespec="seconds"
-                    ),
-                    "العملة": run["symbol"],
-                    "الاتجاه": run["decision"],
-                    "سعر الدخول": run["price"],
-                    "حجم الصفقة USDC": round(notional, 2),
-                    "المخاطرة التقديرية USDC": round(
-                        risk_amount, 2
-                    ),
-                    "الرافعة": leverage,
-                    "الحالة": "مفتوحة",
-                    "النتيجة USDC": 0.0,
-                    "نوع البيانات": "اصطناعية",
-                }
-
-                trades.append(trade)
-                save_trades(trades)
-
-                st.success(
-                    "تم إنشاء صفقة ورقية محلية فقط."
-                )
-                st.rerun()
-
-# =========================================================
-# قسم الوكلاء
-# =========================================================
-with tab_agents:
-    st.subheader("الوكلاء الأربعة")
-
-    descriptions = [
-        (
-            "📈 المحلل الفني",
-            "يفحص التغير السعري ويطبق قواعد اتجاه بسيطة.",
-        ),
-        (
-            "🧮 المحلل الكمي",
-            "يستخدم حدودًا رقمية محددة مسبقًا.",
-        ),
-        (
-            "🛡️ مسؤول المخاطر",
-            "يصوّت انتظار عند ارتفاع التذبذب.",
-        ),
-        (
-            "🔎 المراجع المستقل",
-            "يتطلب حركة أوضح قبل تأييد الاتجاه.",
-        ),
-    ]
-
-    for title, description in descriptions:
+for i, agent in enumerate(AGENTS):
+    icon, name, description = agent
+    with agent_columns[i % 2]:
         st.markdown(
             f"""
             <div class="agent-card">
-                <h3>{title}</h3>
+                <h3>{icon} {name}</h3>
                 <p>{description}</p>
-                <p><b>الصلاحية:</b> التصويت فقط، وليس فتح الصفقة منفردًا.</p>
+                <span>الحالة: جاهز للتحليل التجريبي</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    st.subheader("قاعدة الإجماع")
-    st.code(
-        "فتح صفقة ورقية = إجماع 4/4 على شراء أو بيع",
-        language="text",
-    )
-    st.write(
-        "إذا صوّت أي وكيل انتظار أو خالف اتجاه الآخرين، "
-        "يكون القرار النهائي انتظارًا."
-    )
+# -----------------------------
+# إنشاء بيانات اصطناعية
+# -----------------------------
+def generate_analysis(symbol):
+    base = st.session_state.prices[symbol]
 
-# =========================================================
-# سجل الصفقات الورقية
-# =========================================================
-with tab_trades:
-    st.subheader("سجل التداول الورقي")
+    # تغيّر اصطناعي لأغراض اختبار الواجهة فقط
+    change = random.uniform(-0.025, 0.025)
+    current = max(base * (1 + change), base * 0.5)
+    st.session_state.prices[symbol] = current
 
-    trades = load_trades()
+    scores = [
+        random.choice(["شراء", "بيع", "انتظار"]),
+        random.choice(["شراء", "بيع", "انتظار"]),
+        random.choice(["شراء", "بيع", "انتظار"]),
+        random.choice(["شراء", "بيع", "انتظار"]),
+    ]
 
-    if not trades:
-        st.info("لا توجد صفقات في السجل.")
-    else:
-        st.dataframe(
-            pd.DataFrame(trades),
-            use_container_width=True,
-            hide_index=True,
+    unanimous = len(set(scores)) == 1
+    decision = scores[0] if unanimous else "انتظار"
+
+    return {
+        "symbol": symbol,
+        "price": current,
+        "change_pct": change * 100,
+        "votes": scores,
+        "decision": decision,
+        "unanimous": unanimous,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+# -----------------------------
+# التحليل والإجماع
+# -----------------------------
+st.header("🔎 التحليل والإجماع")
+
+st.write(
+    f"العملة المختارة: **{selected_coin} - "
+    f"{COINS[selected_coin]['name']}**"
+)
+
+if st.button("🔄 تحديث بيانات المحاكاة وتحليل العملة"):
+    st.session_state.last_analysis = generate_analysis(selected_coin)
+
+analysis = st.session_state.last_analysis
+
+if analysis and analysis["symbol"] == selected_coin:
+    p1, p2 = st.columns(2)
+
+    with p1:
+        st.metric(
+            "السعر الاصطناعي",
+            fmt_price(analysis["price"]),
+            f"{analysis['change_pct']:+.2f}%",
         )
 
-        open_ids = [
-            trade["المعرف"]
-            for trade in trades
-            if trade.get("الحالة") == "مفتوحة"
-        ]
+    with p2:
+        st.metric(
+            "قرار المجلس",
+            analysis["decision"],
+            "إجماع 4/4" if analysis["unanimous"] else "لا يوجد إجماع",
+        )
 
-        if open_ids:
-            st.info(
-                "إغلاق الصفقة لا يحسب ربحًا أو خسارة تلقائيًا، "
-                "لأن هذه النسخة لا تستقبل أسعار خروج حقيقية."
-            )
+    st.subheader("أصوات الوكلاء")
 
-            selected_id = st.selectbox(
-                "اختر صفقة لإغلاقها في السجل",
-                open_ids,
-            )
+    for (icon, name, _), vote in zip(AGENTS, analysis["votes"]):
+        st.write(f"{icon} **{name}:** {vote}")
 
-            exit_price = st.number_input(
-                "سعر الخروج التجريبي",
-                min_value=0.000001,
-                value=1.0,
-                format="%.6f",
-                help="أدخل سعرًا افتراضيًا يدويًا. لا يُجلب من السوق.",
-            )
+    if analysis["unanimous"]:
+        st.success(
+            f"تحقق إجماع 4/4 على قرار: {analysis['decision']} "
+            "ضمن بيانات المحاكاة فقط."
+        )
+    else:
+        st.warning(
+            "لم يتحقق إجماع 4/4. لن تُفتح صفقة تجريبية تلقائيًا."
+        )
 
-            if st.button(
-                "إغلاق الصفقة بالسعر المدخل",
-                use_container_width=True,
-            ):
-                updated = False
+    st.caption(f"وقت التحليل: {analysis['time']}")
 
-                for trade in trades:
-                    if (
-                        trade.get("المعرف") == selected_id
-                        and trade.get("الحالة") == "مفتوحة"
-                    ):
-                        entry = float(trade["سعر الدخول"])
-                        direction = trade["الاتجاه"]
-                        notional = float(
-                            trade["حجم الصفقة USDC"]
-                        )
+else:
+    st.info("اضغط زر التحليل لإنشاء بيانات تجريبية جديدة.")
 
-                        if entry <= 0 or exit_price <= 0:
-                            st.error("السعر يجب أن يكون أكبر من صفر.")
-                            st.stop()
+# -----------------------------
+# فتح صفقة تجريبية يدويًا
+# -----------------------------
+st.markdown("---")
+st.header("🧪 تنفيذ صفقة تجريبية")
 
-                        if direction == "شراء":
-                            move = (exit_price - entry) / entry
-                        else:
-                            move = (entry - exit_price) / entry
-
-                        pnl = notional * move
-
-                        trade["سعر الخروج"] = float(exit_price)
-                        trade["النتيجة USDC"] = round(pnl, 2)
-                        trade["الحالة"] = "مغلقة"
-                        trade["نوع النتيجة"] = (
-                            "محسوبة من أسعار مدخلة يدويًا"
-                        )
-
-                        st.session_state.paper_balance += pnl
-                        updated = True
-                        break
-
-                if updated:
-                    save_trades(trades)
-                    st.success(
-                        "أُغلقت الصفقة في السجل الورقي. "
-                        "النتيجة ليست نتيجة تداول حقيقي."
-                    )
-                    st.rerun()
-
-# =========================================================
-# قسم الربط والأمان
-# =========================================================
-with tab_security:
-    st.subheader("حالة الربط")
-
-    st.write("حالة النظام: محاكاة محلية فقط.")
-    st.write("الاتصال بـ Phantom: غير مفعّل.")
-    st.write("الاتصال بـ Hyperliquid: غير مفعّل.")
-    st.write("بيانات السوق المباشرة: غير مفعّلة.")
-    st.write("التنفيذ الحقيقي: غير مفعّل.")
-
-    st.warning(
-        "لا تدخل العبارة السرية أو المفتاح الخاص للمحفظة "
-        "في هذا التطبيق أو في مستودع GitHub."
-    )
-
-    st.markdown(
-        "[موقع Phantom الرسمي](https://phantom.com)"
-        " · "
-        "[وثائق المطورين](https://docs.phantom.com)"
-        " · "
-        "[Hyperliquid](https://hyperliquid.xyz)"
-    )
-
-    st.subheader("حدود النسخة")
-    st.write(
-        "الوكلاء الأربعة يستخدمون قواعد توضيحية، "
-        "ولا يمثلون أربعة نماذج ذكاء اصطناعي مستقلة. "
-        "الأسعار اصطناعية، ونتائج الاختبار لا تتنبأ بالأرباح. "
-        "حجم الصفقة المعروض تقديري ولا يضمن حصر الخسارة."
-    )
-
-st.divider()
 st.caption(
-    "مجلس التداول الذكي | نسخة تجريبية عربية | "
-    "لا ينفذ تداولًا حقيقيًا ولا يقدم ضمانًا للربح."
+    "فتح الصفقة هنا يدوي داخل المحاكاة فقط. "
+    "لن يتم إرسال أي أمر إلى منصة تداول."
+)
+
+side = st.radio(
+    "اتجاه الصفقة",
+    ["شراء", "بيع"],
+    horizontal=True,
+)
+
+position_size = st.number_input(
+    "حجم الصفقة بالدولار",
+    min_value=10.0,
+    max_value=1000.0,
+    value=100.0,
+    step=10.0,
+)
+
+if st.button("فتح صفقة تجريبية"):
+    if not analysis or analysis["symbol"] != selected_coin:
+        st.error("نفّذ التحليل أولًا.")
+    elif not analysis["unanimous"]:
+        st.error("مرفوض: لا يوجد إجماع 4/4.")
+    elif analysis["decision"] != side:
+        st.error("اتجاه الصفقة لا يطابق قرار المجلس.")
+    elif position_size > st.session_state.balance:
+        st.error("الرصيد التجريبي لا يكفي.")
+    else:
+        price = analysis["price"]
+        risk_amount = st.session_state.balance * risk_percent / 100
+        stop_distance = max(price * 0.01, 0.000001)
+        quantity = position_size / price
+
+        trade = {
+            "id": len(st.session_state.trades) + 1,
+            "symbol": selected_coin,
+            "side": side,
+            "entry_price": price,
+            "quantity": quantity,
+            "position_usd": position_size,
+            "risk_budget": risk_amount,
+            "status": "مفتوحة",
+            "opened_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        st.session_state.trades.append(trade)
+        st.session_state.balance -= position_size
+        save_trades()
+        st.success("تم فتح الصفقة التجريبية.")
+        st.rerun()
+
+# -----------------------------
+# إغلاق الصفقة التجريبية
+# -----------------------------
+st.markdown("---")
+st.header("📚 سجل الصفقات")
+
+if open_trades:
+    for trade in open_trades:
+        with st.container(border=True):
+            st.write(
+                f"**#{trade['id']} | {trade['symbol']} | "
+                f"{trade['side']}**"
+            )
+            st.write(f"سعر الدخول: {fmt_price(trade['entry_price'])}")
+            st.write(f"حجم الصفقة: {fmt_money(trade['position_usd'])}")
+
+            close_price = st.number_input(
+                "سعر الإغلاق التجريبي",
+                min_value=0.000001,
+                value=float(st.session_state.prices[trade["symbol"]]),
+                key=f"close_price_{trade['id']}",
+                format="%.6f",
+            )
+
+            if st.button("إغلاق الصفقة", key=f"close_{trade['id']}"):
+                if trade["side"] == "شراء":
+                    pnl = (
+                        close_price - trade["entry_price"]
+                    ) * trade["quantity"]
+                else:
+                    pnl = (
+                        trade["entry_price"] - close_price
+                    ) * trade["quantity"]
+
+                trade["status"] = "مغلقة"
+                trade["exit_price"] = close_price
+                trade["pnl"] = pnl
+                trade["closed_at"] = datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+                st.session_state.balance += (
+                    trade["position_usd"] + pnl
+                )
+                save_trades()
+                st.rerun()
+else:
+    st.info("لا توجد صفقات مفتوحة.")
+
+if st.session_state.trades:
+    history = pd.DataFrame(st.session_state.trades)
+    st.dataframe(history, use_container_width=True, hide_index=True)
+
+    csv_data = history.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        "⬇️ تنزيل سجل الصفقات CSV",
+        data=csv_data,
+        file_name="paper_trades.csv",
+        mime="text/csv",
+    )
+
+if st.button("إعادة ضبط المحاكاة"):
+    st.session_state.balance = 10000.0
+    st.session_state.trades = []
+    st.session_state.last_analysis = None
+    st.session_state.prices = {
+        symbol: info["base"] for symbol, info in COINS.items()
+    }
+
+    if TRADES_FILE.exists():
+        try:
+            TRADES_FILE.unlink()
+        except OSError:
+            st.warning("تعذر حذف ملف سجل الصفقات.")
+
+    st.rerun()
+
+st.markdown("---")
+st.markdown(
+    '<p class="small-note">'
+    'هذه أداة اختبار تعليمية وليست توصية استثمارية. '
+    'بيانات السعر والقرارات عشوائية ولا تمثل السوق الحقيقي.'
+    '</p>',
+    unsafe_allow_html=True,
 )
