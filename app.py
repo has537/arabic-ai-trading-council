@@ -8,21 +8,153 @@ from pathlib import Path
 
 st.set_page_config(page_title="مجلس التداول الذكي", page_icon="🧠", layout="wide", initial_sidebar_state="expanded")
 
+
+
 # RTL Arabic interface styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-html, body, [class*="css"], .stApp { direction: rtl; text-align: right; font-family: 'Cairo', sans-serif; }
-[data-testid="stSidebar"] { direction: rtl; text-align: right; }
-div[data-testid="stMetric"] { direction: rtl; text-align: right; background: rgba(120,120,120,.07); padding: 14px; border-radius: 14px; }
-div[data-testid="stMetric"] label { text-align: right !important; }
-.block-container { padding-top: 1.4rem; }
-.agent-card { border: 1px solid rgba(128,128,128,.3); border-radius: 16px; padding: 16px; min-height: 145px; background: rgba(128,128,128,.04); }
-.status { display:inline-block; padding:4px 10px; border-radius:999px; background:#e6f4ea; color:#176b36; font-weight:700; }
-.warning { border-right: 4px solid #d99a20; padding: 12px 16px; background: rgba(217,154,32,.10); border-radius: 8px; }
-.small { color: #777; font-size: .9rem; }
+
+html, body, .stApp,
+[class*="css"], [data-testid="stAppViewContainer"] {
+    direction: rtl;
+    font-family: 'Cairo', sans-serif;
+}
+
+.stApp {
+    text-align: right;
+}
+
+.block-container {
+    width: 100%;
+    max-width: 1200px;
+    padding: 1.5rem 1rem 3rem 1rem;
+}
+
+[data-testid="stSidebar"] {
+    direction: rtl;
+    text-align: right;
+}
+
+[data-testid="stMarkdownContainer"],
+[data-testid="stWidgetLabel"],
+[data-testid="stMetricLabel"],
+[data-testid="stMetricValue"] {
+    text-align: right;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li {
+    line-height: 1.8 !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+h1, h2, h3, h4 {
+    line-height: 1.5 !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+.stButton button,
+.stSelectbox,
+.stNumberInput,
+.stSlider,
+.stSelectSlider {
+    max-width: 100%;
+}
+
+.stButton button {
+    white-space: normal !important;
+    min-height: 2.8rem;
+}
+
+[data-testid="stMetric"] {
+    direction: rtl;
+    text-align: right;
+    background: rgba(120,120,120,.07);
+    padding: 14px;
+    border-radius: 14px;
+    min-width: 0;
+}
+
+[data-testid="stMetric"] label {
+    text-align: right !important;
+}
+
+[data-testid="stDataFrame"],
+[data-testid="stTable"] {
+    max-width: 100%;
+}
+
+.agent-card {
+    border: 1px solid rgba(128,128,128,.3);
+    border-radius: 16px;
+    padding: 16px;
+    min-height: 145px;
+    background: rgba(128,128,128,.04);
+    overflow-wrap: anywhere;
+}
+
+.agent-card h3 {
+    line-height: 1.6 !important;
+}
+
+.status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #e6f4ea;
+    color: #176b36;
+    font-weight: 700;
+}
+
+.warning {
+    border-right: 4px solid #d99a20;
+    padding: 12px 16px;
+    background: rgba(217,154,32,.10);
+    border-radius: 8px;
+    line-height: 1.9;
+    overflow-wrap: anywhere;
+}
+
+.small {
+    color: #777;
+    font-size: .9rem;
+}
+
+@media (max-width: 640px) {
+    .block-container {
+        padding: 1rem .8rem 2rem .8rem;
+    }
+
+    h1 {
+        font-size: 1.8rem !important;
+    }
+
+    h2 {
+        font-size: 1.4rem !important;
+    }
+
+    h3 {
+        font-size: 1.15rem !important;
+    }
+
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap;
+        gap: .75rem;
+    }
+
+    [data-testid="column"] {
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
